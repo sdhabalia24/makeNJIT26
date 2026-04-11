@@ -1,8 +1,8 @@
 // src/screens/HomeScreen.js
 //
-// Apple Fitness-inspired home screen with vibrant metrics and modern card layout.
+// Apple Fitness-inspired home screen with ESP32 session data and anomaly tracking.
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,13 +12,13 @@ import {
   ActivityIndicator,
   StyleSheet,
   Alert,
+  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
-import { getLatestSession, setBaseUrl } from '../api/esp32Service';
-import { saveSession } from '../api/sessionStorage';
+import { getLatestSession, setBaseUrl, getAllSessions } from '../api/esp32Service';
+import { saveSession, getSessions } from '../api/sessionStorage';
 import FormScoreGauge from '../components/FormScoreGauge';
-import { colors, borderRadius, shadows } from '../theme';
+import { colors, shadows, borderRadius } from '../theme';
 
 function getScoreColor(score) {
   if (score >= 80) return colors.ringGreen;
@@ -26,108 +26,100 @@ function getScoreColor(score) {
   return colors.ringRed;
 }
 
-// Metric Ring Component - Apple Fitness style
-function MetricRing({ value, max, label, unit, color, gradient, icon }) {
-  const percentage = Math.min((value / max) * 100, 100);
-  const size = 80;
-  const strokeWidth = 8;
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const fillOffset = circumference * (1 - percentage / 100);
+function FadeInView({ delay = 0, children, style }) {
+  const opacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(opacity, {
+      toValue: 1,
+      duration: 500,
+      delay,
+      useNativeDriver: true,
+    }).start();
+  }, []);
 
   return (
-    <View style={metricRingStyles.container}>
-      <View style={metricRingStyles.ringWrapper}>
-        <Svg width={size} height={size}>
-          <Defs>
-            <LinearGradient id={`grad-${icon}`} x1="0%" y1="0%" x2="100%" y2="100%">
-              <Stop offset="0%" stopColor={gradient[0]} />
-              <Stop offset="100%" stopColor={gradient[1]} />
-            </LinearGradient>
-          </Defs>
-          
-          {/* Background ring */}
-          <Circle
-            cx={size / 2}
-            cy={size / 2}
-            r={radius}
-            stroke={colors.bgTertiary}
-            strokeWidth={strokeWidth}
-            fill="none"
-            opacity={0.4}
-          />
-          
-          {/* Progress ring */}
-          <Circle
-            cx={size / 2}
-            cy={size / 2}
-            r={radius}
-            stroke={`url(#grad-${icon})`}
-            strokeWidth={strokeWidth}
-            fill="none"
-            strokeLinecap="round"
-            strokeDasharray={circumference}
-            strokeDashoffset={fillOffset}
-            rotation="-90"
-            origin={`${size / 2}, ${size / 2}`}
-            style={{
-              shadowColor: color,
-              shadowOpacity: 0.7,
-              shadowRadius: 8,
-              shadowOffset: { width: 0, height: 0 },
-            }}
-          />
-        </Svg>
-        
-        <View style={metricRingStyles.centerText}>
-          <Text style={[metricRingStyles.value, { color }]}>{value}</Text>
-          <Text style={metricRingStyles.unit}>{unit}</Text>
-        </View>
-      </View>
-      <Text style={metricRingStyles.label}>{label}</Text>
-    </View>
+    <Animated.View style={[{ opacity }, style]}>
+      {children}
+    </Animated.View>
   );
 }
 
-const metricRingStyles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 8,
-  },
-  ringWrapper: {
-    position: 'relative',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  centerText: {
-    position: 'absolute',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  value: {
-    fontSize: 22,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-  },
-  unit: {
-    fontSize: 9,
-    color: colors.textTertiary,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  label: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    fontWeight: '600',
-    letterSpacing: 0.3,
-  },
-});
+function formatDate(timestamp) {
+  const date = new Date(timestamp * 1000);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+// Anomaly pill for a single session
+function SessionAnomalyRow({ session }) {
+  const score = session.form_score;
+  const color = getScoreColor(score);
+  const hasAnomalies = session.anomalies && session.anomalies.length > 0;
+
+  return (
+    <View style={styles.anomalySessionCard}>
+      <View style={styles.anomalySessionHeader}>
+        <Text style={styles.anomalySessionId} numberOfLines={1}>
+          {session.session_id}
+        </Text>
+        <Text style={styles.anomalySessionTime}>
+          {formatDate(session.timestamp)}
+        </Text>
+      </View>
+      {hasAnomalies ? (
+        <View style={styles.anomalyPillRow}>
+          {session.anomalies.map((flag, i) => (
+            <View key={i} style={[styles.anomalyPill, { backgroundColor: `${color}15` }]}>
+              <View style={[styles.anomalyPillDot, { backgroundColor: color }]} />
+              <Text style={[styles.anomalyPillText, { color }]} numberOfLines={1}>
+                {flag.replace(/_/g, ' ')}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <View style={styles.cleanRow}>
+          <Ionicons name="checkmark-circle" size={13} color={colors.ringGreen} />
+          <Text style={styles.cleanText}>No anomalies</Text>
+        </View>
+      )}
+    </View>
+  );
+}
 
 export default function HomeScreen() {
   const [ipAddress, setIpAddress] = useState('');
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [allSessions, setAllSessions] = useState([]);
+
+  const loadAllSessions = async () => {
+    try {
+      try {
+        const remote = await getAllSessions();
+        setAllSessions(remote);
+      } catch {
+        const local = await getSessions();
+        setAllSessions(local);
+      }
+    } catch {
+      // silently fail
+    }
+  };
+
+  useEffect(() => {
+    loadAllSessions();
+  }, []);
 
   const handleFetch = async () => {
     if (ipAddress.trim()) setBaseUrl(ipAddress.trim());
@@ -137,6 +129,7 @@ export default function HomeScreen() {
       const data = await getLatestSession();
       setSession(data);
       await saveSession(data);
+      loadAllSessions();
     } catch {
       Alert.alert(
         'Connection Failed',
@@ -147,34 +140,54 @@ export default function HomeScreen() {
     }
   };
 
-  return (
-    <View style={styles.pageContainer}>
-      <ScrollView 
-        style={styles.container} 
-        contentContainerStyle={styles.content} 
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.greeting}>TODAY'S ACTIVITY</Text>
-            <Text style={styles.title}>perForm</Text>
-          </View>
-          <View style={[styles.statusIndicator, session && styles.statusIndicatorActive]}>
-            <View style={[styles.statusDot, session && styles.statusDotActive]} />
-            {session && <Text style={styles.statusTextActive}>LIVE</Text>}
-          </View>
-        </View>
+  const scoreColor = session ? getScoreColor(session.form_score) : null;
 
-        {/* Connection Panel */}
-        <View style={styles.connectionPanel}>
-          <View style={styles.connectionHeader}>
-            <View style={styles.iconContainer}>
-              <Ionicons name="hardware-chip" size={22} color={colors.primary} />
+  const sortedSessions = useMemo(
+    () => [...allSessions].sort((a, b) => b.timestamp - a.timestamp),
+    [allSessions]
+  );
+
+  const totalAnomalies = useMemo(
+    () =>
+      allSessions.reduce(
+        (sum, s) => sum + (s.anomalies ? s.anomalies.length : 0),
+        0
+      ),
+    [allSessions]
+  );
+
+  return (
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Header */}
+      <FadeInView delay={0} style={styles.header}>
+        <View>
+          <Text style={styles.greeting}>TODAY</Text>
+          <Text style={styles.title}>perForm</Text>
+        </View>
+        {allSessions.length > 0 && (
+          <View style={styles.badge}>
+            <Text style={styles.badgeCount}>{allSessions.length}</Text>
+            <Text style={styles.badgeLabel}>sessions</Text>
+          </View>
+        )}
+      </FadeInView>
+
+      {/* ESP32 Connection Panel */}
+      <FadeInView delay={100}>
+        <View style={styles.card}>
+          <View style={styles.connectHeader}>
+            <View style={[styles.connectIcon, { backgroundColor: colors.primaryMuted }]}>
+              <Ionicons name="hardware-chip" size={20} color={colors.primary} />
             </View>
-            <View style={styles.connectionText}>
-              <Text style={styles.panelTitle}>Connect ESP32</Text>
-              <Text style={styles.panelDesc}>Enter device IP to fetch session data</Text>
+            <View style={styles.connectText}>
+              <Text style={styles.connectTitle}>ESP32 Device</Text>
+              <Text style={styles.connectDesc}>
+                Fetch latest session data from your device
+              </Text>
             </View>
           </View>
           <View style={styles.inputRow}>
@@ -188,229 +201,221 @@ export default function HomeScreen() {
               autoCapitalize="none"
             />
             <TouchableOpacity
-              style={[styles.button, loading && styles.buttonDisabled]}
+              style={[styles.fetchButton, loading && styles.fetchButtonDisabled]}
               onPress={handleFetch}
-              disabled={loading}>
+              disabled={loading}
+            >
               {loading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <View style={styles.buttonContent}>
-                  <Ionicons name="arrow-down-circle" size={20} color="#fff" />
-                  <Text style={styles.buttonText}>Fetch</Text>
-                </View>
+                <Ionicons name="arrow-down" size={20} color="#fff" />
               )}
             </TouchableOpacity>
           </View>
         </View>
+      </FadeInView>
 
-        {/* Session Results */}
-        {session && (
-          <>
-            {/* Score Ring */}
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Ionicons name="fitness" size={20} color={colors.ringRed} />
-                <Text style={styles.sectionTitle}>FORM SCORE</Text>
-              </View>
-              <FormScoreGauge score={session.form_score} />
-            </View>
+      {/* Session Results */}
+      {session && (
+        <FadeInView delay={200} style={styles.resultsSection}>
+          <Text style={styles.sectionTitle}>SESSION RESULTS</Text>
 
-            {/* Metrics Rings */}
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Ionicons name="analytics" size={20} color={colors.primary} />
-                <Text style={styles.sectionTitle}>PERFORMANCE</Text>
-              </View>
-              <View style={styles.metricsContainer}>
-                <MetricRing 
-                  value={session.rep_count} 
-                  max={50} 
-                  label="Repetitions" 
-                  unit="reps"
-                  color={colors.primary}
-                  gradient={colors.gradients.reps}
-                  icon="repeat"
-                />
-                <View style={styles.metricDivider} />
-                <MetricRing 
-                  value={session.avg_velocity} 
-                  max={5} 
-                  label="Avg Velocity" 
-                  unit="m/s"
-                  color={colors.ringGreen}
-                  gradient={colors.gradients.velocity}
-                  icon="speedometer"
-                />
-              </View>
-            </View>
-
-            {/* Session Info */}
-            <View style={styles.infoCard}>
-              <Ionicons name="shield-checkmark" size={18} color={colors.textTertiary} />
-              <Text style={styles.sessionId}>{session.session_id}</Text>
-            </View>
-
-            {/* Form Analysis */}
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Ionicons name="warning" size={20} color={colors.warning} />
-                <Text style={styles.sectionTitle}>FORM ANALYSIS</Text>
-              </View>
-              <View style={styles.analysisCard}>
-                {session.anomalies && session.anomalies.length > 0 ? (
-                  <View style={styles.anomalyList}>
-                    {session.anomalies.map((flag, i) => {
-                      const flagColor = getScoreColor(Math.max(0, 100 - session.anomalies.length * 15));
-                      return (
-                        <View key={i} style={[styles.anomalyItem, { backgroundColor: `${flagColor}20` }]}>
-                          <View style={[styles.anomalyIndicator, { backgroundColor: flagColor }]} />
-                          <Text style={[styles.anomalyText, { color: flagColor }]}>
-                            {flag.replace(/_/g, ' ')}
-                          </Text>
-                        </View>
-                      );
-                    })}
-                  </View>
-                ) : (
-                  <View style={styles.perfectForm}>
-                    <View style={[styles.perfectIconContainer, { backgroundColor: colors.ringGreenMuted }]}>
-                      <Ionicons name="checkmark-circle" size={32} color={colors.ringGreen} />
-                    </View>
-                    <Text style={styles.perfectTitle}>Perfect Form</Text>
-                    <Text style={styles.perfectDesc}>No anomalies detected. Great job!</Text>
-                  </View>
-                )}
-              </View>
-            </View>
-          </>
-        )}
-
-        {/* Empty state */}
-        {!session && !loading && (
-          <View style={styles.emptyState}>
-            <View style={styles.emptyIconContainer}>
-              <Ionicons name="bluetooth" size={56} color={colors.textTertiary} />
-            </View>
-            <Text style={styles.emptyTitle}>Ready to Track</Text>
-            <Text style={styles.emptyText}>
-              Connect your ESP32 device to view form scores, reps, and velocity metrics
-            </Text>
+          {/* Form Score */}
+          <View style={styles.formScoreSection}>
+            <FormScoreGauge score={session.form_score} />
           </View>
-        )}
-      </ScrollView>
-    </View>
+
+          {/* Performance Metrics */}
+          <View style={styles.card}>
+            <View style={styles.metricItem}>
+              <View style={[styles.metricIcon, { backgroundColor: colors.primaryMuted }]}>
+                <Ionicons name="repeat" size={18} color={colors.primary} />
+              </View>
+              <View style={styles.metricText}>
+                <Text style={styles.metricValue}>{session.rep_count}</Text>
+                <Text style={styles.metricLabel}>Repetitions</Text>
+              </View>
+            </View>
+            <View style={styles.metricDivider} />
+            <View style={styles.metricItem}>
+              <View style={[styles.metricIcon, { backgroundColor: colors.ringGreenMuted }]}>
+                <Ionicons name="speedometer" size={18} color={colors.ringGreen} />
+              </View>
+              <View style={styles.metricText}>
+                <Text style={[styles.metricValue, { color: colors.ringGreen }]}>
+                  {session.avg_velocity}
+                </Text>
+                <Text style={styles.metricLabel}>Avg Velocity (m/s)</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Session Anomalies */}
+          {session.anomalies && session.anomalies.length > 0 ? (
+            <View style={[styles.card, styles.analysisCard]}>
+              <View style={styles.analysisHeader}>
+                <Ionicons name="warning" size={16} color={colors.warning} />
+                <Text style={styles.analysisTitle}>Form Anomalies</Text>
+              </View>
+              {session.anomalies.map((flag, i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.anomalyItem,
+                    { backgroundColor: `${scoreColor}15` },
+                  ]}
+                >
+                  <View style={[styles.anomalyDot, { backgroundColor: scoreColor }]} />
+                  <Text style={[styles.anomalyText, { color: scoreColor }]}>
+                    {flag.replace(/_/g, ' ')}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <View style={[styles.card, styles.perfectCard]}>
+              <View style={[styles.perfectIcon, { backgroundColor: colors.ringGreenMuted }]}>
+                <Ionicons name="checkmark-circle" size={36} color={colors.ringGreen} />
+              </View>
+              <Text style={[styles.perfectTitle, { color: colors.ringGreen }]}>
+                Perfect Form
+              </Text>
+              <Text style={styles.perfectDesc}>
+                No anomalies detected. Great job!
+              </Text>
+            </View>
+          )}
+
+          <View style={styles.sessionIdRow}>
+            <Ionicons name="shield-checkmark" size={14} color={colors.textTertiary} />
+            <Text style={styles.sessionIdText}>{session.session_id}</Text>
+          </View>
+        </FadeInView>
+      )}
+
+      {/* All Sessions Anomalies */}
+      {sortedSessions.length > 0 && (
+        <FadeInView delay={300} style={styles.anomaliesSection}>
+          <Text style={styles.sectionTitle}>
+            ALL ANOMALIES · {totalAnomalies} total
+          </Text>
+          {sortedSessions.map((s) => (
+            <SessionAnomalyRow key={s.session_id} session={s} />
+          ))}
+        </FadeInView>
+      )}
+
+      {/* Empty State */}
+      {!session && !loading && sortedSessions.length === 0 && (
+        <FadeInView delay={300} style={styles.emptyState}>
+          <View style={styles.emptyIcon}>
+            <Ionicons name="bluetooth" size={48} color={colors.textTertiary} />
+          </View>
+          <Text style={styles.emptyTitle}>Ready to Track</Text>
+          <Text style={styles.emptyDesc}>
+            Connect your ESP32 device to view form scores, reps, and velocity
+          </Text>
+        </FadeInView>
+      )}
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  pageContainer: { 
-    flex: 1, 
-    backgroundColor: colors.bgPrimary 
-  },
-  container: { 
+  container: {
     flex: 1,
+    backgroundColor: colors.bgPrimary,
   },
-  content: { 
-    padding: 20, 
-    paddingTop: 28, 
-    paddingBottom: 40 
+  content: {
+    padding: 20,
+    paddingTop: 16,
+    paddingBottom: 40,
   },
 
   // Header
-  header: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'flex-start', 
-    marginBottom: 24 
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 24,
   },
-  greeting: { 
-    fontSize: 11, 
-    color: colors.textTertiary, 
+  greeting: {
+    fontSize: 11,
+    color: colors.textTertiary,
     fontWeight: '700',
-    letterSpacing: 2,
+    letterSpacing: 2.5,
     marginBottom: 6,
   },
-  title: { 
-    fontSize: 40, 
-    fontWeight: '900', 
-    color: colors.textPrimary, 
+  title: {
+    fontSize: 40,
+    fontWeight: '900',
+    color: colors.textPrimary,
     letterSpacing: -1.5,
   },
-  statusIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.bgTertiary,
-    paddingHorizontal: 12,
+  badge: {
+    backgroundColor: colors.bgCard,
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 20,
-    gap: 6,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.border,
+    alignItems: 'center',
   },
-  statusIndicatorActive: {
-    borderColor: colors.ringGreen,
-    backgroundColor: `${colors.ringGreen}15`,
+  badgeCount: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: colors.textPrimary,
+    letterSpacing: -0.5,
   },
-  statusDot: { 
-    width: 8, 
-    height: 8, 
-    borderRadius: 4, 
-    backgroundColor: colors.textTertiary,
-  },
-  statusDotActive: {
-    backgroundColor: colors.ringGreen,
-    shadowColor: colors.ringGreen,
-    shadowOpacity: 0.8,
-    shadowRadius: 8,
-  },
-  statusTextActive: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: colors.ringGreen,
-    letterSpacing: 0.5,
+  badgeLabel: {
+    fontSize: 9,
+    color: colors.textTertiary,
+    fontWeight: '700',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
   },
 
-  // Connection Panel
-  connectionPanel: {
+  // Generic card
+  card: {
     backgroundColor: colors.bgCard,
-    borderRadius: 20,
-    padding: 18,
-    marginBottom: 20,
+    borderRadius: borderRadius.xxl,
+    padding: 20,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: colors.border,
     ...shadows.card,
   },
-  connectionHeader: {
+
+  // Connect
+  connectHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
     gap: 14,
     marginBottom: 16,
   },
-  iconContainer: {
+  connectIcon: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: colors.primaryMuted,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  connectionText: {
+  connectText: {
     flex: 1,
   },
-  panelTitle: { 
-    fontSize: 17, 
-    fontWeight: '700', 
-    color: colors.textPrimary, 
+  connectTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: colors.textPrimary,
     marginBottom: 4,
   },
-  panelDesc: { 
-    fontSize: 13, 
+  connectDesc: {
+    fontSize: 13,
     color: colors.textSecondary,
     lineHeight: 18,
   },
-  inputRow: { 
-    flexDirection: 'row', 
-    gap: 10 
+  inputRow: {
+    flexDirection: 'row',
+    gap: 10,
   },
   input: {
     flex: 1,
@@ -424,122 +429,105 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     color: colors.textPrimary,
   },
-  button: {
+  fetchButton: {
     backgroundColor: colors.primary,
     borderRadius: 14,
-    paddingHorizontal: 20,
-    justifyContent: 'center',
+    width: 52,
     alignItems: 'center',
-    minWidth: 100,
+    justifyContent: 'center',
   },
-  buttonDisabled: { 
+  fetchButtonDisabled: {
     backgroundColor: colors.textDisabled,
     opacity: 0.5,
   },
-  buttonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  buttonText: { 
-    color: '#fff', 
-    fontWeight: '700', 
-    fontSize: 15,
-    letterSpacing: 0.3,
-  },
 
-  // Sections
-  section: {
-    marginBottom: 20,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  // Results
+  sectionTitle: {
+    fontSize: 11,
+    color: colors.textTertiary,
+    fontWeight: '800',
+    letterSpacing: 2.5,
     marginBottom: 12,
   },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: colors.textPrimary,
-    letterSpacing: 1.5,
+  resultsSection: {
+    marginTop: 8,
   },
-
-  // Metrics
-  metricsContainer: {
-    backgroundColor: colors.bgCard,
-    borderRadius: 20,
-    padding: 24,
-    flexDirection: 'row',
+  formScoreSection: {
+    marginBottom: 16,
+  },
+  metricItem: {
+    flex: 1,
     alignItems: 'center',
-    justifyContent: 'space-around',
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadows.card,
+    gap: 8,
+  },
+  metricIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  metricText: {
+    alignItems: 'center',
+  },
+  metricValue: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: colors.textPrimary,
+    letterSpacing: -0.5,
+  },
+  metricLabel: {
+    fontSize: 10,
+    color: colors.textTertiary,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   metricDivider: {
     width: 1,
-    height: 80,
+    height: 60,
     backgroundColor: colors.border,
   },
 
-  // Info Card
-  infoCard: {
-    backgroundColor: colors.bgCard,
-    borderRadius: 16,
-    padding: 16,
+  // Analysis
+  analysisCard: {},
+  analysisHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     gap: 8,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
+    marginBottom: 14,
   },
-  sessionId: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    fontFamily: 'monospace',
-  },
-
-  // Analysis Card
-  analysisCard: {
-    backgroundColor: colors.bgCard,
-    borderRadius: 20,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadows.card,
-  },
-  anomalyList: {
-    gap: 10,
+  analysisTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.textPrimary,
   },
   anomalyItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
     gap: 10,
+    marginBottom: 6,
   },
-  anomalyIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  anomalyDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   anomalyText: {
     fontSize: 14,
     fontWeight: '700',
     textTransform: 'capitalize',
-    letterSpacing: 0.2,
   },
-  perfectForm: {
+
+  // Perfect form
+  perfectCard: {
     alignItems: 'center',
-    paddingVertical: 20,
+    paddingVertical: 28,
     gap: 10,
   },
-  perfectIconContainer: {
+  perfectIcon: {
     width: 64,
     height: 64,
     borderRadius: 32,
@@ -549,7 +537,6 @@ const styles = StyleSheet.create({
   perfectTitle: {
     fontSize: 19,
     fontWeight: '800',
-    color: colors.ringGreen,
     letterSpacing: -0.3,
   },
   perfectDesc: {
@@ -558,34 +545,110 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
-  // Empty State
-  emptyState: { 
-    alignItems: 'center', 
-    paddingVertical: 80,
-    gap: 16,
-  },
-  emptyIconContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: colors.bgCard,
+  // Session ID
+  sessionIdRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  sessionIdText: {
+    fontSize: 12,
+    color: colors.textTertiary,
+    fontWeight: '600',
+    fontFamily: 'monospace',
+  },
+
+  // All anomalies section
+  anomaliesSection: {
+    marginTop: 8,
+  },
+  anomalySessionCard: {
+    backgroundColor: colors.bgCard,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: colors.border,
+    ...shadows.card,
   },
-  emptyTitle: { 
-    fontSize: 24, 
-    fontWeight: '900', 
+  anomalySessionHeader: {
+    marginBottom: 10,
+  },
+  anomalySessionId: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginBottom: 3,
+  },
+  anomalySessionTime: {
+    fontSize: 12,
+    color: colors.textTertiary,
+  },
+  anomalyPillRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  anomalyPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    gap: 6,
+  },
+  anomalyPillDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+  },
+  anomalyPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'capitalize',
+  },
+  cleanRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingTop: 4,
+  },
+  cleanText: {
+    fontSize: 13,
+    color: colors.ringGreen,
+    fontWeight: '600',
+  },
+
+  // Empty
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 60,
+    gap: 14,
+  },
+  emptyIcon: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: colors.bgCard,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyTitle: {
+    fontSize: 22,
+    fontWeight: '900',
     color: colors.textPrimary,
     letterSpacing: -0.5,
   },
-  emptyText: { 
-    fontSize: 15, 
-    color: colors.textSecondary, 
-    textAlign: 'center', 
-    paddingHorizontal: 24,
+  emptyDesc: {
+    fontSize: 15,
+    color: colors.textSecondary,
+    textAlign: 'center',
     lineHeight: 22,
     fontWeight: '500',
+    paddingHorizontal: 24,
   },
 });

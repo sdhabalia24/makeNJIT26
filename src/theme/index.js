@@ -1,5 +1,6 @@
 // src/theme/index.js
-// Apple Fitness-inspired theme with vibrant gradients and glow effects
+//
+// Apple Fitness-inspired theme with vibrant gradients and glow effects.
 
 export const colors = {
   // Apple Fitness-style dark backgrounds
@@ -32,7 +33,17 @@ export const colors = {
   ringBlueMuted: 'rgba(100, 210, 255, 0.15)',
   ringBlueGlow: 'rgba(100, 210, 255, 0.4)',
 
-  // Legacy colors (mapped to new system)
+  // Workout type gradients
+  workoutGradients: {
+    hiit: ['#FF375F', '#FF6B35', '#FF9F0A'],
+    yoga: ['#BF5AF2', '#5E5CE6', '#5AC8FA'],
+    strength: ['#FFD60A', '#FF9F0A', '#FF6B35'],
+    cycling: ['#30D158', '#64D2FF', '#5AC8FA'],
+    run: ['#FF453A', '#FF6961', '#FF9F0A'],
+    walk: ['#30D158', '#34C759', '#64D2FF'],
+  },
+
+  // Legacy / generic colors
   primary: '#64D2FF',
   primaryLight: '#8FDEFF',
   primaryDark: '#40B8E6',
@@ -57,13 +68,18 @@ export const colors = {
   errorMuted: 'rgba(255, 55, 95, 0.15)',
   errorMutedStrong: 'rgba(255, 55, 95, 0.25)',
 
+  // Purple
+  purple: '#BF5AF2',
+  purpleMuted: 'rgba(191, 90, 242, 0.15)',
+  purpleGlow: 'rgba(191, 90, 242, 0.4)',
+
   // Text
   textPrimary: '#FFFFFF',
   textSecondary: '#A1A1A6',
   textTertiary: '#636366',
   textDisabled: '#48484A',
 
-  // Gradients
+  // Gradients (legacy)
   gradients: {
     formScore: ['#FF375F', '#FF6B8A'],
     velocity: ['#30D158', '#5AE07A'],

@@ -72,14 +72,7 @@ function FitnessRing({ size, strokeWidth, progress, gradientColors }) {
         strokeLinecap="round"
         strokeDasharray={circumference}
         strokeDashoffset={fillOffset}
-        rotation="-90"
-        origin={`${size / 2}, ${size / 2}`}
-        style={{
-          shadowColor: gradientColors[0],
-          shadowOpacity: 0.8,
-          shadowRadius: 12,
-          shadowOffset: { width: 0, height: 0 },
-        }}
+        transform={`rotate(-90 ${size / 2} ${size / 2})`}
       />
     </Svg>
   );
