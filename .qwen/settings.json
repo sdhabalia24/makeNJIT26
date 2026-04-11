@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(C:\\Users\\Saahil/**)"
+    ]
+  },
+  "$version": 3
+}

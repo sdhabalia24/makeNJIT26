@@ -28,6 +28,15 @@ export const getLatestSession = async () => {
 };
 
 /**
+ * Fetches all sessions from the ESP32.
+ * Returns an array of SessionData objects.
+ */
+export const getAllSessions = async () => {
+  const response = await client.get('/sessions');
+  return response.data;
+};
+
+/**
  * Fetches a live snapshot of the current in-progress session.
  * Uncomment when the ESP32 supports this endpoint.
  */
