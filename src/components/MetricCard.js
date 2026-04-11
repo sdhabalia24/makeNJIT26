@@ -1,17 +1,12 @@
 // src/components/MetricCard.js
-// A modern reusable card for displaying metric values with icons.
+// A simple reusable card for displaying a single metric value.
 
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { colors, borderRadius, shadows } from '../theme';
 
-export default function MetricCard({ label, value, icon, iconColor = colors.primary, iconBg = colors.primaryMuted }) {
+export default function MetricCard({ label, value }) {
   return (
     <View style={styles.card}>
-      <View style={[styles.iconContainer, { backgroundColor: iconBg }]}>
-        <Ionicons name={icon} size={24} color={iconColor} />
-      </View>
       <Text style={styles.value}>{value}</Text>
       <Text style={styles.label}>{label}</Text>
     </View>
@@ -21,34 +16,25 @@ export default function MetricCard({ label, value, icon, iconColor = colors.prim
 const styles = StyleSheet.create({
   card: {
     flex: 1,
-    backgroundColor: colors.bgCard,
-    borderRadius: borderRadius.lg,
-    padding: 20,
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 16,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadows.card,
-  },
-  iconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
   },
   value: {
-    fontSize: 32,
-    fontWeight: '900',
-    color: colors.textPrimary,
-    letterSpacing: -0.5,
-    marginBottom: 6,
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1A1A2E',
+    marginBottom: 4,
   },
   label: {
-    fontSize: 10,
-    color: colors.textTertiary,
+    fontSize: 12,
+    color: '#888',
     textTransform: 'uppercase',
-    letterSpacing: 1,
-    fontWeight: '600',
+    letterSpacing: 0.5,
   },
 });
