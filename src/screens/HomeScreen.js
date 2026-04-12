@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { getLatestSession, setBaseUrl, getAllSessions } from '../api/esp32Service';
+import { getLatestSession, setBaseUrl, getAllSessions, startExercise, EXERCISES } from '../api/esp32Service';
 import { saveSession, getSessions } from '../api/sessionStorage';
 import FormScoreGauge from '../components/FormScoreGauge';
 import { colors, shadows, borderRadius } from '../theme';
@@ -56,6 +56,136 @@ function formatDate(timestamp) {
     minute: '2-digit',
     hour12: true,
   });
+}
+
+// Exercise dropdown selector component
+function ExerciseDropdown({ onSelectExercise, startingExercise }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [selectedExercise, setSelectedExercise] = useState(null);
+  const [showDetails, setShowDetails] = useState(false);
+
+  const handleSelect = (exercise) => {
+    setSelectedExercise(exercise);
+    setIsOpen(false);
+    setShowDetails(true);
+  };
+
+  const handleStart = async () => {
+    if (selectedExercise) {
+      onSelectExercise(selectedExercise);
+    }
+  };
+
+  const handleCancel = () => {
+    setSelectedExercise(null);
+    setShowDetails(false);
+  };
+
+  if (showDetails && selectedExercise) {
+    return (
+      <View style={styles.exerciseDetails}>
+        <View style={styles.exerciseDetailsHeader}>
+          <View style={styles.exerciseIcon}>
+            <Ionicons name="barbell" size={24} color={colors.purple} />
+          </View>
+          <View style={styles.exerciseText}>
+            <Text style={styles.exerciseName}>{selectedExercise.name}</Text>
+            <Text style={styles.exerciseLabel}>Selected Exercise</Text>
+          </View>
+        </View>
+        
+        <View style={styles.placementInfo}>
+          <View style={styles.placementRow}>
+            <View style={styles.placementIcon}>
+              <Ionicons name="location" size={16} color={colors.primary} />
+            </View>
+            <View style={styles.placementText}>
+              <Text style={styles.placementLabel}>Band Location</Text>
+              <Text style={styles.placementValue}>{selectedExercise.bandLocation}</Text>
+            </View>
+          </View>
+          
+          <View style={styles.placementRow}>
+            <View style={styles.placementIcon}>
+              <Ionicons name="navigate" size={16} color={colors.primary} />
+            </View>
+            <View style={styles.placementText}>
+              <Text style={styles.placementLabel}>Exact Position</Text>
+              <Text style={styles.placementValue}>{selectedExercise.position}</Text>
+            </View>
+          </View>
+          
+          <View style={styles.placementRow}>
+            <View style={styles.placementIcon}>
+              <Ionicons name="eye" size={16} color={colors.primary} />
+            </View>
+            <View style={styles.placementText}>
+              <Text style={styles.placementLabel}>Sensor Facing</Text>
+              <Text style={styles.placementValue}>{selectedExercise.sensorFacing}</Text>
+            </View>
+          </View>
+        </View>
+        
+        <View style={styles.exerciseButtons}>
+          <TouchableOpacity style={styles.cancelButton} onPress={handleCancel} disabled={startingExercise}>
+            <Text style={styles.cancelButtonText}>Change</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.startButton, startingExercise && { opacity: 0.7 }]} 
+            onPress={handleStart}
+            disabled={startingExercise}
+          >
+            {startingExercise ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Ionicons name="play" size={18} color="#fff" />
+            )}
+            <Text style={styles.startButtonText}>
+              {startingExercise ? 'Starting...' : 'Start Exercise'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.dropdownContainer}>
+      <TouchableOpacity
+        style={styles.dropdownTrigger}
+        onPress={() => setIsOpen(!isOpen)}
+      >
+        <View style={styles.dropdownLeft}>
+          <Ionicons name="barbell" size={18} color={colors.textSecondary} />
+          <Text style={styles.dropdownText}>
+            Select Exercise to Start
+          </Text>
+        </View>
+        <Ionicons
+          name={isOpen ? 'chevron-up' : 'chevron-down'}
+          size={18}
+          color={colors.textSecondary}
+        />
+      </TouchableOpacity>
+
+      {isOpen && (
+        <View style={styles.dropdownMenu}>
+          <ScrollView style={styles.dropdownScroll} nestedScrollEnabled>
+            {EXERCISES.map((exercise, idx) => (
+              <TouchableOpacity
+                key={idx}
+                style={styles.dropdownItem}
+                onPress={() => handleSelect(exercise)}
+              >
+                <Text style={styles.dropdownItemText}>{exercise.name}</Text>
+                <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+    </View>
+  );
 }
 
 // Anomaly pill for a single session
@@ -100,6 +230,7 @@ export default function HomeScreen() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(false);
   const [allSessions, setAllSessions] = useState([]);
+  const [startingExercise, setStartingExercise] = useState(false);
   const navigation = useNavigation();
 
   const loadAllSessions = async () => {
@@ -119,6 +250,27 @@ export default function HomeScreen() {
   useEffect(() => {
     loadAllSessions();
   }, []);
+
+  const handleStartExercise = async (exercise) => {
+    setStartingExercise(true);
+    try {
+      await startExercise(exercise.name);
+      Alert.alert(
+        'Exercise Started',
+        `${exercise.name} tracking has started. The sensor should be placed on your ${exercise.bandLocation.toLowerCase()} at ${exercise.position.toLowerCase()}, facing ${exercise.sensorFacing.toLowerCase()}.`,
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      console.error('Failed to start exercise:', error);
+      Alert.alert(
+        'Connection Failed',
+        `Could not start ${exercise.name}. Make sure the ESP32 device is connected and running.`,
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setStartingExercise(false);
+    }
+  };
 
   const handleFetch = async () => {
     if (ipAddress.trim()) setBaseUrl(ipAddress.trim());
@@ -173,6 +325,14 @@ export default function HomeScreen() {
             <Text style={styles.badgeLabel}>sessions</Text>
           </View>
         )}
+      </FadeInView>
+
+      {/* Exercise Selection Dropdown */}
+      <FadeInView delay={50}>
+        <ExerciseDropdown 
+          onSelectExercise={handleStartExercise}
+          startingExercise={startingExercise}
+        />
       </FadeInView>
 
       {/* ESP32 Connection Panel */}
@@ -685,5 +845,169 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontWeight: '500',
     paddingHorizontal: 24,
+  },
+
+  // Exercise Dropdown
+  dropdownContainer: {
+    marginBottom: 16,
+    position: 'relative',
+    zIndex: 100,
+  },
+  dropdownTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.bgCard,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.card,
+  },
+  dropdownLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  dropdownText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  dropdownMenu: {
+    marginTop: 8,
+    backgroundColor: colors.bgCard,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    maxHeight: 300,
+    ...shadows.card,
+  },
+  dropdownScroll: {
+    maxHeight: 300,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 0.5,
+    borderBottomColor: colors.border,
+  },
+  dropdownItemText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: colors.textPrimary,
+    flex: 1,
+  },
+
+  // Exercise Details
+  exerciseDetails: {
+    backgroundColor: colors.bgCard,
+    borderRadius: 16,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 16,
+    ...shadows.card,
+  },
+  exerciseDetailsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 8,
+  },
+  exerciseIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: `${colors.purple}20`,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  exerciseText: {
+    flex: 1,
+  },
+  exerciseName: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    letterSpacing: -0.3,
+  },
+  exerciseLabel: {
+    fontSize: 12,
+    color: colors.textTertiary,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  placementInfo: {
+    gap: 12,
+  },
+  placementRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  placementIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.primaryMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  placementText: {
+    flex: 1,
+  },
+  placementLabel: {
+    fontSize: 11,
+    color: colors.textTertiary,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    marginBottom: 2,
+  },
+  placementValue: {
+    fontSize: 14,
+    color: colors.textPrimary,
+    fontWeight: '600',
+    lineHeight: 20,
+  },
+  exerciseButtons: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 8,
+  },
+  cancelButton: {
+    flex: 1,
+    backgroundColor: colors.bgTertiary,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  cancelButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.textSecondary,
+  },
+  startButton: {
+    flex: 2,
+    backgroundColor: colors.primary,
+    borderRadius: 14,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  startButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#fff',
   },
 });

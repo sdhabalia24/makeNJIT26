@@ -10,17 +10,129 @@
 
 import axios from 'axios';
 
-//const BASE_URL = 'http://172.20.10.3:8080'; // ← change this
+// Exercise placement data
+export const EXERCISES = [
+  { 
+    name: 'Barbell Biceps Curl', 
+    bandLocation: 'Forearm', 
+    position: 'Mid-forearm, 2 inches below elbow', 
+    sensorFacing: 'Out (away from body)' 
+  },
+  { 
+    name: 'Hammer Curl', 
+    bandLocation: 'Forearm', 
+    position: 'Mid-forearm, 2 inches below elbow', 
+    sensorFacing: 'Out' 
+  },
+  { 
+    name: 'Bench Press', 
+    bandLocation: 'Forearm', 
+    position: 'Mid-forearm, sensor flat on top', 
+    sensorFacing: 'Up (toward ceiling)' 
+  },
+  { 
+    name: 'Incline Bench Press', 
+    bandLocation: 'Forearm', 
+    position: 'Mid-forearm, sensor flat on top', 
+    sensorFacing: 'Up' 
+  },
+  { 
+    name: 'Decline Bench Press', 
+    bandLocation: 'Forearm', 
+    position: 'Mid-forearm, sensor flat on top', 
+    sensorFacing: 'Up' 
+  },
+  { 
+    name: 'Shoulder Press', 
+    bandLocation: 'Forearm', 
+    position: 'Mid-forearm, 2 inches below elbow', 
+    sensorFacing: 'Out' 
+  },
+  { 
+    name: 'Lateral Raise', 
+    bandLocation: 'Forearm', 
+    position: 'Mid-forearm', 
+    sensorFacing: 'Down (toward floor)' 
+  },
+  { 
+    name: 'Chest Fly Machine', 
+    bandLocation: 'Forearm', 
+    position: 'Mid-forearm', 
+    sensorFacing: 'In (toward chest)' 
+  },
+  { 
+    name: 'Tricep Pushdown', 
+    bandLocation: 'Forearm', 
+    position: 'Mid-forearm', 
+    sensorFacing: 'Down' 
+  },
+  { 
+    name: 'Tricep Dips', 
+    bandLocation: 'Forearm', 
+    position: 'Mid-forearm', 
+    sensorFacing: 'Back (away from face)' 
+  },
+  { 
+    name: 'Squat', 
+    bandLocation: 'Shin', 
+    position: 'Mid-shin, between knee and ankle', 
+    sensorFacing: 'Forward' 
+  },
+  { 
+    name: 'Romanian Deadlift', 
+    bandLocation: 'Shin', 
+    position: 'Mid-shin, between knee and ankle', 
+    sensorFacing: 'Forward' 
+  },
+  { 
+    name: 'Leg Raises', 
+    bandLocation: 'Lower Leg', 
+    position: 'Mid-calf', 
+    sensorFacing: 'Forward' 
+  },
+  { 
+    name: 'Hip Thrust', 
+    bandLocation: 'Shin', 
+    position: 'Mid-shin, between knee and ankle', 
+    sensorFacing: 'Forward' 
+  },
+  { 
+    name: 'Lat Pulldown', 
+    bandLocation: 'Forearm', 
+    position: 'Mid-forearm, 2 inches below elbow', 
+    sensorFacing: 'Out' 
+  },
+  { 
+    name: 'Pull Up', 
+    bandLocation: 'Forearm', 
+    position: 'Mid-forearm, 2 inches below elbow', 
+    sensorFacing: 'Out' 
+  },
+  { 
+    name: 'T Bar Row', 
+    bandLocation: 'Forearm', 
+    position: 'Mid-forearm', 
+    sensorFacing: 'Down' 
+  },
+  { 
+    name: 'Seated Row', 
+    bandLocation: 'Forearm', 
+    position: 'Mid-forearm', 
+    sensorFacing: 'Down' 
+  },
+];
+
+//const BASE_URL = 'http://172.20.10.3:8080'; // - change this
 const BASE_URL = 'http://localhost:8080';
 const client = axios.create({
   baseURL: BASE_URL,
-  timeout: 5000, // 5 second timeout — ESP32 can be slow
+  timeout: 5000, // 5 second timeout - ESP32 can be slow
   headers: { 'Content-Type': 'application/json' },
 });
 
 /**
- * Normalizes a raw ESP32 session (v2 format) into the shape the app expects.
- * Maps new v2 fields → legacy field names so the rest of the app doesn't break.
+ * Normalizes a raw ESP32 session into the shape the app expects.
+ * Maps new v2 fields - legacy field names so the rest of the app doesn't break.
  * Throws if required fields are missing.
  */
 const normalizeSession = (raw) => {
@@ -44,7 +156,7 @@ const normalizeSession = (raw) => {
     year: 'numeric',
   });
   return {
-    // Machine-friendly unique ID for deduplication & React keys (guaranteed unique per second)
+    // Machine-friendly unique ID for deduplication & React keys 
     session_id:   `${raw.exercise.replace(/\s+/g, '_')}_${raw.start_time}`,
     // Human-readable label for display
     display_name: `${raw.exercise} — ${dateStr}`,
@@ -144,6 +256,18 @@ export const sendChatMessage = async (message, systemPrompt = '', chatHistory = 
  */
 export const setAiBaseUrl = (ip, port = 1234) => {
   aiClient.defaults.baseURL = `http://${ip}:${port}`;
+};
+
+/**
+ * Starts an exercise tracking session on the ESP32.
+ * @param {string} exerciseName - The name of the exercise to start
+ * @returns {Promise<Object>} - Response from the ESP32
+ */
+export const startExercise = async (exerciseName) => {
+  const response = await client.post('/start', {
+    exercise: exerciseName,
+  });
+  return response.data;
 };
 
 /*

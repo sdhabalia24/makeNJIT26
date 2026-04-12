@@ -18,8 +18,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import { colors, shadows, borderRadius } from '../theme';
-import { sendChatMessage, getAllSessions } from '../api/esp32Service';
-import { getSessions } from '../api/sessionStorage';
+import { sendChatMessage, EXERCISES } from '../api/esp32Service';
 
 const SUGGESTED_QUESTIONS = [
   { icon: 'barbell', text: 'How was my form today?' },
@@ -27,6 +26,79 @@ const SUGGESTED_QUESTIONS = [
   { icon: 'trophy', text: 'What are my best reps?' },
   { icon: 'alert-circle', text: 'What anomalies did I have?' },
 ];
+
+// Build the system prompt for sensor placement
+const buildSystemPrompt = () => {
+  const supportedExercises = EXERCISES.map(ex => ex.name).join(', ');
+
+  return `You are a fitness form-checking assistant that guides users on where to place an IMU sensor band on their body during exercise.
+
+## YOUR ONLY JOB
+
+When a user tells you what exercise they are doing, respond with exactly one placement instruction from the table below. Do not improvise. Do not add extra steps.
+
+## PLACEMENT TABLE
+
+| Exercise | Band Location | Exact Position | Sensor Facing |
+|---|---|---|---|
+| Barbell Biceps Curl | Forearm | Mid-forearm, 2 inches below elbow | Out (away from body) |
+| Hammer Curl | Forearm | Mid-forearm, 2 inches below elbow | Out |
+| Bench Press | Forearm | Mid-forearm, sensor flat on top | Up (toward ceiling) |
+| Incline Bench Press | Forearm | Mid-forearm, sensor flat on top | Up |
+| Decline Bench Press | Forearm | Mid-forearm, sensor flat on top | Up |
+| Shoulder Press | Forearm | Mid-forearm, 2 inches below elbow | Out |
+| Lateral Raise | Forearm | Mid-forearm | Down (toward floor) |
+| Chest Fly Machine | Forearm | Mid-forearm | In (toward chest) |
+| Tricep Pushdown | Forearm | Mid-forearm | Down |
+| Tricep Dips | Forearm | Mid-forearm | Back (away from face) |
+| Squat | Shin | Mid-shin, between knee and ankle | Forward |
+| Deadlift | Shin | Mid-shin, between knee and ankle | Forward |
+| Romanian Deadlift | Shin | Mid-shin, between knee and ankle | Forward |
+| Leg Extension | Shin | Mid-shin, between knee and ankle | Forward |
+| Leg Raises | Lower Leg | Mid-calf | Forward |
+| Hip Thrust | Shin | Mid-shin, between knee and ankle | Forward |
+| Lat Pulldown | Forearm | Mid-forearm, 2 inches below elbow | Out |
+| Pull Up | Forearm | Mid-forearm, 2 inches below elbow | Out |
+| T Bar Row | Forearm | Mid-forearm | Down |
+| Seated Row | Forearm | Mid-forearm | Down |
+
+## RESPONSE FORMAT
+
+Use this exact format. Do not deviate:
+
+Exercise: [exercise name]
+Place the band on your [location].
+Position: [exact position].
+Sensor facing: [direction].
+
+## RULES
+
+1. Match the exercise name exactly as listed. If the user says something similar (e.g., "curls" instead of "barbell biceps curl"), ask them to clarify which curl variation.
+2. If the exercise is not in the table, say: "I don't have placement data for that exercise. Supported exercises: ${supportedExercises}."
+3. Keep responses under 50 words. No extra tips. No safety warnings. Just the placement.
+4. If the user asks "where does it go?" without naming an exercise, ask: "What exercise are you doing?"
+
+## EXAMPLES
+
+User: "barbell biceps curl"
+Assistant:
+Exercise: Barbell Biceps Curl
+Place the band on your forearm.
+Position: Mid-forearm, 2 inches below elbow.
+Sensor facing: Out (away from body).
+
+User: "squats"
+Assistant:
+I don't have data for "squats." Do you mean "Squat"?
+
+User: "bench"
+Assistant:
+I don't have data for "bench." Do you mean "Bench Press," "Incline Bench Press," or "Decline Bench Press"?
+
+User: "Where do I put this?"
+Assistant:
+What exercise are you doing?`;
+};
 
 function MessageBubble({ msg }) {
   const isUser = msg.role === 'user';
@@ -100,82 +172,11 @@ export default function ChatScreen() {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [sessionContext, setSessionContext] = useState('');
   const flatListRef = useRef(null);
-
-  // Load session data and build system prompt on mount
-  useEffect(() => {
-    const loadSessionContext = async () => {
-      try {
-        let sessions = [];
-        try {
-          sessions = await getAllSessions();
-        } catch {
-          sessions = await getSessions();
-        }
-
-        if (sessions.length > 0) {
-          const prompt = buildSystemPrompt(sessions);
-          setSessionContext(prompt);
-        }
-      } catch (error) {
-        console.error('Failed to load session context:', error);
-      }
-    };
-    loadSessionContext();
-  }, []);
 
   useEffect(() => {
     flatListRef.current?.scrollToEnd({ animated: true });
   }, [messages]);
-
-  const buildSystemPrompt = (sessions) => {
-    const recentSessions = sessions.slice(0, 5); // Last 5 sessions
-    
-    let prompt = `You are an AI fitness coach. You have access to the user's workout data and can provide personalized advice based on their exercise sessions.\n\n`;
-    
-    prompt += `WORKOUT DATA:\n`;
-    
-    recentSessions.forEach((session, idx) => {
-      const date = new Date(session.timestamp * 1000).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-      });
-      
-      prompt += `\nSession ${idx + 1} (${date}):\n`;
-      prompt += `- Exercise: ${session._raw?.exercise || session.display_name || 'Unknown'}\n`;
-      prompt += `- Reps: ${session.rep_count || 'N/A'}\n`;
-      prompt += `- Form Score: ${session.form_score || 'N/A'}/100\n`;
-      prompt += `- Avg Velocity: ${session.avg_velocity || 'N/A'} m/s\n`;
-      
-      if (session.anomalies && session.anomalies.length > 0) {
-        prompt += `- Anomalies: ${session.anomalies.join(', ')}\n`;
-      } else {
-        prompt += `- Anomalies: None (perfect form)\n`;
-      }
-      
-      // Add per-rep data if available
-      if (session._raw?.reps && session._raw.reps.length > 0) {
-        const avgRepScore = (
-          session._raw.reps.reduce((sum, r) => sum + (r.form_score || 0), 0) / 
-          session._raw.reps.length
-        ).toFixed(1);
-        prompt += `- Average Rep Score: ${avgRepScore}/100\n`;
-      }
-    });
-    
-    prompt += `\nGUIDELINES:\n`;
-    prompt += `- Answer questions about the user's form, reps, velocity, and anomalies\n`;
-    prompt += `- Provide specific, actionable advice based on the data\n`;
-    prompt += `- If form score is low, suggest improvements\n`;
-    prompt += `- If anomalies exist, explain what they mean and how to fix them\n`;
-    prompt += `- Be encouraging and supportive\n`;
-    prompt += `- Keep responses concise and focused\n`;
-    
-    return prompt;
-  };
 
   const handleSend = async () => {
     const text = input.trim();
@@ -207,8 +208,9 @@ export default function ChatScreen() {
           content: msg.content,
         }));
 
-      // Get AI response with session context
-      const response = await sendChatMessage(text, sessionContext, chatHistory);
+      // Get AI response with system prompt
+      const systemPrompt = buildSystemPrompt();
+      const response = await sendChatMessage(text, systemPrompt, chatHistory);
 
       // Replace loading message with actual response
       setMessages((prev) =>
@@ -265,15 +267,8 @@ export default function ChatScreen() {
           </View>
           <View style={styles.headerText}>
             <Text style={styles.headerTitle}>AI Coach</Text>
-            <Text style={styles.headerSubtitle}>
-              {sessionContext ? 'Workout data loaded' : 'Ask about your workouts'}
-            </Text>
+            <Text style={styles.headerSubtitle}>Sensor placement guide</Text>
           </View>
-          {sessionContext && (
-            <View style={styles.dataIndicator}>
-              <Ionicons name="checkmark-circle" size={14} color={colors.ringGreen} />
-            </View>
-          )}
         </View>
 
         {/* Messages */}
@@ -356,14 +351,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textTertiary,
     marginTop: 1,
-  },
-  dataIndicator: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: `${colors.ringGreen}20`,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 
   // Empty state
