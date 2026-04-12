@@ -19,15 +19,14 @@ import { colors, shadows } from '../theme';
 
 function formatDate(timestamp) {
   const date = new Date(timestamp * 1000);
-  const now = new Date();
-  const diffMs = now - date;
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffHours < 24) return 'Today';
-  if (diffHours < 48) return 'Yesterday';
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
 }
 
 function getTrend(sessions) {

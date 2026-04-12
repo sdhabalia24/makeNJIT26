@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import HomeScreen from './src/screens/HomeScreen';
 import StatsScreen from './src/screens/StatsScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
+import RepDetailScreen from './src/screens/RepDetailScreen';
 import { colors } from './src/theme';
 
 const Stack = createNativeStackNavigator();
@@ -103,6 +104,14 @@ export default function App() {
             }}
           >
             <Stack.Screen name="HomeTabs" component={HomeTabs} />
+            <Stack.Screen
+              name="RepDetail"
+              component={RepDetailScreen}
+              options={{
+                headerShown: false,
+                animation: 'slide_from_right',
+              }}
+            />
           </Stack.Navigator>
         </NavigationContainer>
       </SafeAreaProvider>

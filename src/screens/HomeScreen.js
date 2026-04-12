@@ -15,6 +15,7 @@ import {
   Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import { getLatestSession, setBaseUrl, getAllSessions } from '../api/esp32Service';
 import { saveSession, getSessions } from '../api/sessionStorage';
 import FormScoreGauge from '../components/FormScoreGauge';
@@ -47,17 +48,14 @@ function FadeInView({ delay = 0, children, style }) {
 
 function formatDate(timestamp) {
   const date = new Date(timestamp * 1000);
-  const now = new Date();
-  const diffMs = now - date;
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
 }
 
 // Anomaly pill for a single session
@@ -102,6 +100,7 @@ export default function HomeScreen() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(false);
   const [allSessions, setAllSessions] = useState([]);
+  const navigation = useNavigation();
 
   const loadAllSessions = async () => {
     try {
@@ -249,6 +248,20 @@ export default function HomeScreen() {
               </View>
             </View>
           </View>
+
+          {/* View Reps Button */}
+          {session._raw?.reps && session._raw.reps.length > 0 && (
+            <TouchableOpacity
+              style={styles.viewRepsButton}
+              onPress={() =>
+                navigation.navigate('RepDetail', { session })
+              }
+            >
+              <Ionicons name="list" size={18} color={colors.ringBlue} />
+              <Text style={styles.viewRepsText}>View Rep Breakdown</Text>
+              <Ionicons name="chevron-forward" size={18} color={colors.ringBlue} />
+            </TouchableOpacity>
+          )}
 
           {/* Session Anomalies */}
           {session.anomalies && session.anomalies.length > 0 ? (
@@ -486,6 +499,28 @@ const styles = StyleSheet.create({
     width: 1,
     height: 60,
     backgroundColor: colors.border,
+  },
+
+  // View Reps button
+  viewRepsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.bgCard,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: `${colors.ringBlue}30`,
+    marginBottom: 16,
+    ...shadows.card,
+  },
+  viewRepsText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.ringBlue,
+    letterSpacing: 0.3,
   },
 
   // Analysis
