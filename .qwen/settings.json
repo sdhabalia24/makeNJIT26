@@ -11,7 +11,8 @@
       "Bash(taskkill *)",
       "Bash(node *)",
       "Bash(rmdir *)",
-      "Bash(npm uninstall *)"
+      "Bash(npm uninstall *)",
+      "Bash(npm view *)"
     ]
   },
   "$version": 3

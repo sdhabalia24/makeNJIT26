@@ -8,10 +8,12 @@ import {
   Text,
   ScrollView,
   StyleSheet,
+  TouchableOpacity,
   useWindowDimensions,
 } from 'react-native';
 import { LineChart } from 'react-native-chart-kit';
 import Animated, { FadeInUp, FadeInDown } from 'react-native-reanimated';
+import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { getSessions } from '../api/sessionStorage';
 import { getAllSessions } from '../api/esp32Service';
@@ -34,10 +36,10 @@ function getTrend(sessions) {
   const sorted = [...sessions].sort((a, b) => a.timestamp - b.timestamp);
   const half = Math.ceil(sorted.length / 2);
   const recent =
-    sorted.slice(half).reduce((s, x) => s + x.form_score, 0) /
+    sorted.slice(half).reduce((s, x) => s + (x.form_score ?? 0), 0) /
     (sorted.length - half);
   const older =
-    sorted.slice(0, half).reduce((s, x) => s + x.form_score, 0) / half;
+    sorted.slice(0, half).reduce((s, x) => s + (x.form_score ?? 0), 0) / half;
   const diff = recent - older;
   return {
     direction: diff > 2 ? 'up' : diff < -2 ? 'down' : 'flat',
@@ -154,17 +156,17 @@ const statStyles = StyleSheet.create({
 });
 
 // Anomaly session card
-function AnomalySession({ session }) {
+function AnomalySession({ session, onPress }) {
   const score = session.form_score;
   const scoreColor =
     score >= 80 ? colors.ringGreen : score >= 55 ? colors.warning : colors.ringRed;
 
-  return (
+  const Card = (
     <View style={anomalyStyles.sessionCard}>
       <View style={anomalyStyles.sessionHeader}>
         <View style={anomalyStyles.sessionInfo}>
           <Text style={anomalyStyles.sessionId} numberOfLines={1}>
-            {session.session_id}
+            {session.display_name || session.session_id}
           </Text>
           <Text style={anomalyStyles.sessionTime}>
             {formatDate(session.timestamp)}
@@ -202,6 +204,12 @@ function AnomalySession({ session }) {
       )}
     </View>
   );
+
+  return onPress ? (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
+      {Card}
+    </TouchableOpacity>
+  ) : Card;
 }
 
 const anomalyStyles = {
@@ -282,6 +290,7 @@ export default function StatsScreen() {
   const { width } = useWindowDimensions();
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const navigation = useNavigation();
 
   useEffect(() => {
     const load = async () => {
@@ -303,12 +312,12 @@ export default function StatsScreen() {
   const summary = useMemo(() => {
     if (sessions.length === 0) return null;
     const avgScore = Math.round(
-      sessions.reduce((s, x) => s + x.form_score, 0) / sessions.length
+      sessions.reduce((s, x) => s + (x.form_score ?? 0), 0) / sessions.length
     );
     const avgVelocity = (
-      sessions.reduce((s, x) => s + x.avg_velocity, 0) / sessions.length
+      sessions.reduce((s, x) => s + (x.avg_velocity ?? 0), 0) / sessions.length
     ).toFixed(2);
-    const totalReps = sessions.reduce((s, x) => s + x.rep_count, 0);
+    const totalReps = sessions.reduce((s, x) => s + (x.rep_count ?? 0), 0);
     const totalAnomalies = sessions.reduce(
       (s, x) => s + (x.anomalies ? x.anomalies.length : 0),
       0
@@ -323,7 +332,7 @@ export default function StatsScreen() {
     const last10 = sorted.slice(-10);
     return {
       labels: last10.map((s) => formatDate(s.timestamp)),
-      datasets: [{ data: last10.map((s) => s.form_score) }],
+      datasets: [{ data: last10.map((s) => s.form_score ?? 0) }],
     };
   }, [sessions]);
 
@@ -347,7 +356,7 @@ export default function StatsScreen() {
         avgScore:
           daySessions.length > 0
             ? Math.round(
-                daySessions.reduce((sum, s) => sum + s.form_score, 0) /
+                daySessions.reduce((sum, s) => sum + (s.form_score ?? 0), 0) /
                   daySessions.length
               )
             : 0,
@@ -533,7 +542,11 @@ export default function StatsScreen() {
           >
             <Text style={styles.sectionTitle}>ANOMALIES</Text>
             {sortedSessions.map((session) => (
-              <AnomalySession key={session.session_id} session={session} />
+              <AnomalySession
+                key={session.session_id}
+                session={session}
+                onPress={() => navigation.navigate('RepDetail', { session })}
+              />
             ))}
           </Animated.View>
         </>

@@ -68,7 +68,7 @@ function SessionAnomalyRow({ session }) {
     <View style={styles.anomalySessionCard}>
       <View style={styles.anomalySessionHeader}>
         <Text style={styles.anomalySessionId} numberOfLines={1}>
-          {session.session_id}
+          {session.display_name || session.session_id}
         </Text>
         <Text style={styles.anomalySessionTime}>
           {formatDate(session.timestamp)}
@@ -111,8 +111,8 @@ export default function HomeScreen() {
         const local = await getSessions();
         setAllSessions(local);
       }
-    } catch {
-      // silently fail
+    } catch (err) {
+      console.error('Failed to load sessions from all sources:', err);
     }
   };
 
@@ -301,7 +301,7 @@ export default function HomeScreen() {
 
           <View style={styles.sessionIdRow}>
             <Ionicons name="shield-checkmark" size={14} color={colors.textTertiary} />
-            <Text style={styles.sessionIdText}>{session.session_id}</Text>
+            <Text style={styles.sessionIdText}>{session.display_name}</Text>
           </View>
         </FadeInView>
       )}

@@ -10,8 +10,8 @@
 
 import axios from 'axios';
 
-//const BASE_URL = 'http://10.0.2.2:8080'; // ← change this
-const BASE_URL = 'http://localhost:8080';
+const BASE_URL = 'http://172.20.10.3:8080'; // ← change this
+//const BASE_URL = 'http://localhost:8080';
 const client = axios.create({
   baseURL: BASE_URL,
   timeout: 5000, // 5 second timeout — ESP32 can be slow
@@ -21,8 +21,22 @@ const client = axios.create({
 /**
  * Normalizes a raw ESP32 session (v2 format) into the shape the app expects.
  * Maps new v2 fields → legacy field names so the rest of the app doesn't break.
+ * Throws if required fields are missing.
  */
 const normalizeSession = (raw) => {
+  if (!raw || typeof raw !== 'object') {
+    throw new Error('Invalid session data: expected object');
+  }
+  if (typeof raw.exercise !== 'string' || !raw.exercise) {
+    throw new Error('Invalid session data: missing exercise name');
+  }
+  if (typeof raw.start_time !== 'number') {
+    throw new Error('Invalid session data: missing start_time');
+  }
+  if (typeof raw.end_time !== 'number') {
+    throw new Error('Invalid session data: missing end_time');
+  }
+
   const date = new Date(raw.start_time * 1000);
   const dateStr = date.toLocaleDateString('en-US', {
     month: 'short',
@@ -30,7 +44,10 @@ const normalizeSession = (raw) => {
     year: 'numeric',
   });
   return {
-    session_id:   `${raw.exercise} — ${dateStr}`,
+    // Machine-friendly unique ID for deduplication & React keys (guaranteed unique per second)
+    session_id:   `${raw.exercise.replace(/\s+/g, '_')}_${raw.start_time}`,
+    // Human-readable label for display
+    display_name: `${raw.exercise} — ${dateStr}`,
     timestamp:    raw.end_time,
     rep_count:    raw.rep_count,
     avg_velocity: raw.avg_accel,          // use avg_accel as velocity proxy
@@ -100,10 +117,11 @@ export const setBaseUrl = (ip, port = 80) => {
   }
 
   Field mapping (ESP32 → app):
-    session.form_score    ← avg_form_score
-    session.rep_count     ← rep_count
-    session.avg_velocity  ← avg_accel  (treated as proxy)
-    session.anomalies     ← anomalies
-    session.session_id    ← generated from exercise + start_time
-    session.timestamp     ← end_time
+    session.session_id      ← exercise + unix timestamp (unique, for keys/dedup)
+    session.display_name    ← exercise + readable date (for display)
+    session.form_score      ← avg_form_score
+    session.rep_count       ← rep_count
+    session.avg_velocity    ← avg_accel  (treated as proxy)
+    session.anomalies       ← anomalies
+    session.timestamp       ← end_time
 */

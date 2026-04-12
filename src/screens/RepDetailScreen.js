@@ -25,27 +25,25 @@ function getScoreColor(score) {
 }
 
 function formatDuration(sec) {
-  return sec.toFixed(1) + 's';
+  return (sec ?? 0).toFixed(1) + 's';
 }
 
 // ---------- Per-rep card ----------
 function RepCard({ rep, index }) {
-  const scoreColor = getScoreColor(rep.form_score);
+  const scoreColor = getScoreColor(rep.form_score ?? 0);
   const hasViolations = rep.violations && rep.violations.length > 0;
 
   return (
     <Animated.View
-      entering={FadeInUp.duration(300).delay(index * 50)}
+      entering={FadeInUp.duration(300).delay(Math.min(index * 50, 600))}
       style={styles.repCard}
     >
       {/* Rep number + score badge */}
       <View style={styles.repHeader}>
-        <View style={styles.repNumberWrap}>
-          <Text style={styles.repNumber}>REP {rep.rep_number}</Text>
-        </View>
+        <Text style={styles.repNumber}>REP {rep.rep_number ?? '?'}</Text>
         <View style={[styles.scoreBadge, { backgroundColor: `${scoreColor}18` }]}>
           <Text style={[styles.scoreValue, { color: scoreColor }]}>
-            {rep.form_score}
+            {rep.form_score ?? '—'}
           </Text>
         </View>
       </View>
@@ -60,21 +58,21 @@ function RepCard({ rep, index }) {
         <View style={styles.metricDivider} />
         <View style={styles.metric}>
           <Ionicons name="pulse" size={14} color={colors.textTertiary} />
-          <Text style={styles.metricValue}>{rep.avg_accel.toFixed(1)}</Text>
+          <Text style={styles.metricValue}>{(rep.avg_accel ?? 0).toFixed(1)}</Text>
           <Text style={styles.metricLabel}>Avg Accel</Text>
         </View>
       </View>
 
-      {/* Violations */}
+      {/* Violations — use colors.warning (same as HomeScreen anomalies) */}
       {hasViolations && (
         <View style={styles.violationsRow}>
           {rep.violations.map((v, i) => (
             <View
               key={i}
-              style={[styles.violationPill, { backgroundColor: `${colors.error}15` }]}
+              style={[styles.violationPill, { backgroundColor: `${colors.warning}15` }]}
             >
-              <Ionicons name="warning" size={11} color={colors.error} />
-              <Text style={[styles.violationText, { color: colors.error }]}>
+              <Ionicons name="warning" size={11} color={colors.warning} />
+              <Text style={[styles.violationText, { color: colors.warning }]}>
                 {v.replace(/_/g, ' ')}
               </Text>
             </View>
@@ -88,7 +86,7 @@ function RepCard({ rep, index }) {
           style={[
             styles.barFill,
             {
-              width: `${Math.max(rep.form_score, 4)}%`,
+              width: `${Math.max(rep.form_score ?? 0, 4)}%`,
               backgroundColor: scoreColor,
             },
           ]}
@@ -104,36 +102,74 @@ export default function RepDetailScreen() {
   const navigation = useNavigation();
   const { width } = useWindowDimensions();
 
-  const { reps = [], exercise = '', avg_form_score = 0, rep_count = 0 } =
-    route.params?.session?._raw || route.params || {};
+  // Robust extraction: session may be normalized (has _raw) or passed raw directly
+  const sessionData = route.params?.session || {};
+  const rawData = sessionData._raw || sessionData;
+  const reps = rawData.reps || [];
+  const exercise = rawData.exercise || '';
+  const avg_form_score = rawData.avg_form_score ?? sessionData.form_score ?? 0;
+  const rep_count = rawData.rep_count ?? sessionData.rep_count ?? 0;
+
+  const sortedReps = useMemo(
+    () => [...reps].sort((a, b) => a.rep_number - b.rep_number),
+    [reps],
+  );
 
   const chartData = useMemo(() => {
-    if (!reps || reps.length === 0) return null;
-    const sorted = [...reps].sort((a, b) => a.rep_number - b.rep_number);
+    if (sortedReps.length === 0) return null;
     return {
-      labels: sorted.map((r) => `R${r.rep_number}`),
-      datasets: [{ data: sorted.map((r) => r.form_score) }],
+      labels: sortedReps.map((r) => `R${r.rep_number ?? ''}`),
+      datasets: [{ data: sortedReps.map((r) => r.form_score ?? 0) }],
+    };
+  }, [sortedReps]);
+
+  const chartWidth = useMemo(() => Math.min(width - 80, 500), [width]);
+
+  const stats = useMemo(() => {
+    if (!reps.length) return { avgDuration: '0', totalViolations: 0, bestRep: null, worstRep: null };
+    let totalDur = 0;
+    let totalV = 0;
+    let best = reps[0];
+    let worst = reps[0];
+    for (const r of reps) {
+      totalDur += r.duration ?? 0;
+      totalV += (r.violations ? r.violations.length : 0);
+      const score = r.form_score ?? 0;
+      const bestScore = best.form_score ?? 0;
+      const worstScore = worst.form_score ?? 0;
+      if (score > bestScore) best = r;
+      if (score < worstScore) worst = r;
+    }
+    return {
+      avgDuration: (totalDur / reps.length).toFixed(1),
+      totalViolations: totalV,
+      bestRep: best,
+      worstRep: worst,
     };
   }, [reps]);
 
-  const chartWidth = Math.min(width - 80, 500);
-
-  const avgDuration = reps.length
-    ? (reps.reduce((s, r) => s + r.duration, 0) / reps.length).toFixed(1)
-    : '0';
-
-  const totalViolations = reps.reduce(
-    (s, r) => s + (r.violations ? r.violations.length : 0),
-    0
-  );
-
-  const bestRep = reps.length
-    ? reps.reduce((best, r) => (r.form_score > best.form_score ? r : best))
-    : null;
-
-  const worstRep = reps.length
-    ? reps.reduce((worst, r) => (r.form_score < worst.form_score ? r : worst))
-    : null;
+  // chartConfig is constant — extract to module level to prevent re-renders
+  const memoChartConfig = useMemo(() => ({
+    backgroundColor: colors.bgCard,
+    backgroundGradientFrom: colors.bgCard,
+    backgroundGradientTo: colors.bgCard,
+    decimalPlaces: 0,
+    color: () => colors.ringRed,
+    labelColor: () => colors.textTertiary,
+    propsForDots: {
+      r: '4',
+      strokeWidth: '2',
+      stroke: colors.ringRed,
+      fill: colors.bgPrimary,
+    },
+    propsForBackgroundLines: {
+      stroke: colors.border,
+      strokeDasharray: '6,6',
+      strokeOpacity: 0.3,
+    },
+    fillShadowGradient: colors.ringRed,
+    fillShadowGradientOpacity: 0.15,
+  }), []);
 
   return (
     <ScrollView
@@ -170,26 +206,26 @@ export default function RepDetailScreen() {
       </Animated.View>
 
       {/* Summary cards */}
-      {reps.length > 0 && (
+      {sortedReps.length > 0 && (
         <Animated.View entering={FadeInDown.duration(400).delay(100)} style={styles.summaryRow}>
           <View style={styles.summaryCard}>
             <Ionicons name="fitness" size={18} color={colors.ringGreen} />
             <Text style={[styles.summaryValue, { color: colors.ringGreen }]}>
-              {avg_form_score || (reps.reduce((s, r) => s + r.form_score, 0) / reps.length).toFixed(0)}
+              {avg_form_score || (reps.reduce((s, r) => s + (r.form_score ?? 0), 0) / reps.length).toFixed(0)}
             </Text>
             <Text style={styles.summaryLabel}>Avg Score</Text>
           </View>
           <View style={styles.summaryCard}>
             <Ionicons name="time" size={18} color={colors.ringBlue} />
             <Text style={[styles.summaryValue, { color: colors.ringBlue }]}>
-              {avgDuration}s
+              {stats.avgDuration}s
             </Text>
             <Text style={styles.summaryLabel}>Avg Dur</Text>
           </View>
           <View style={styles.summaryCard}>
             <Ionicons name="warning" size={18} color={colors.warning} />
             <Text style={[styles.summaryValue, { color: colors.warning }]}>
-              {totalViolations}
+              {stats.totalViolations}
             </Text>
             <Text style={styles.summaryLabel}>Violations</Text>
           </View>
@@ -197,20 +233,20 @@ export default function RepDetailScreen() {
       )}
 
       {/* Best / Worst rep */}
-      {bestRep && worstRep && bestRep.rep_number !== worstRep.rep_number && (
+      {stats.bestRep && stats.worstRep && stats.bestRep.rep_number !== stats.worstRep.rep_number && (
         <Animated.View entering={FadeInUp.delay(200)} style={styles.bestWorstRow}>
           <View style={[styles.bestWorstCard, styles.bestCard]}>
             <Ionicons name="arrow-up-circle" size={16} color={colors.ringGreen} />
             <Text style={styles.bestWorstLabel}>Best</Text>
             <Text style={[styles.bestWorstValue, { color: colors.ringGreen }]}>
-              Rep {bestRep.rep_number} · {bestRep.form_score}
+              Rep {stats.bestRep.rep_number} · {stats.bestRep.form_score}
             </Text>
           </View>
           <View style={[styles.bestWorstCard, styles.worstCard]}>
             <Ionicons name="arrow-down-circle" size={16} color={colors.error} />
             <Text style={styles.bestWorstLabel}>Worst</Text>
             <Text style={[styles.bestWorstValue, { color: colors.error }]}>
-              Rep {worstRep.rep_number} · {worstRep.form_score}
+              Rep {stats.worstRep.rep_number} · {stats.worstRep.form_score}
             </Text>
           </View>
         </Animated.View>
@@ -233,27 +269,7 @@ export default function RepDetailScreen() {
               withDots
               withShadow
               bezier
-              chartConfig={{
-                backgroundColor: colors.bgCard,
-                backgroundGradientFrom: colors.bgCard,
-                backgroundGradientTo: colors.bgCard,
-                decimalPlaces: 0,
-                color: () => colors.ringRed,
-                labelColor: () => colors.textTertiary,
-                propsForDots: {
-                  r: '4',
-                  strokeWidth: '2',
-                  stroke: colors.ringRed,
-                  fill: colors.bgPrimary,
-                },
-                propsForBackgroundLines: {
-                  stroke: colors.border,
-                  strokeDasharray: '6,6',
-                  strokeOpacity: 0.3,
-                },
-                fillShadowGradient: colors.ringRed,
-                fillShadowGradientOpacity: 0.15,
-              }}
+              chartConfig={memoChartConfig}
               style={{ borderRadius: 12 }}
               fromZero
             />
@@ -261,19 +277,17 @@ export default function RepDetailScreen() {
         </Animated.View>
       )}
 
-      {/* Rep list */}
+      {/* Rep list — use sortedReps (memoized, no mutation) */}
       <Animated.View entering={FadeInUp.duration(500).delay(400)} style={styles.section}>
         <Text style={styles.sectionTitle}>
-          ALL REPS · {reps.length} total
+          ALL REPS · {sortedReps.length} total
         </Text>
-        {reps
-          .sort((a, b) => a.rep_number - b.rep_number)
-          .map((rep, i) => (
-            <RepCard key={rep.rep_number} rep={rep} index={i} />
-          ))}
+        {sortedReps.map((rep, i) => (
+          <RepCard key={rep.rep_number ?? i} rep={rep} index={i} />
+        ))}
       </Animated.View>
 
-      {reps.length === 0 && (
+      {sortedReps.length === 0 && (
         <Animated.View entering={FadeInUp.delay(300)} style={styles.empty}>
           <Ionicons name="list" size={48} color={colors.textTertiary} />
           <Text style={styles.emptyTitle}>No Rep Data</Text>
@@ -472,7 +486,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
-  repNumberWrap: {},
   repNumber: {
     fontSize: 11,
     fontWeight: '800',
