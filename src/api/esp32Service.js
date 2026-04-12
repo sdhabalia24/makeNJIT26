@@ -10,8 +10,8 @@
 
 import axios from 'axios';
 
-const BASE_URL = 'http://172.20.10.3:8080'; // ← change this
-//const BASE_URL = 'http://localhost:8080';
+//const BASE_URL = 'http://172.20.10.3:8080'; // ← change this
+const BASE_URL = 'http://localhost:8080';
 const client = axios.create({
   baseURL: BASE_URL,
   timeout: 5000, // 5 second timeout — ESP32 can be slow
@@ -92,6 +92,58 @@ export const getAllSessions = async () => {
  */
 export const setBaseUrl = (ip, port = 80) => {
   client.defaults.baseURL = `http://${ip}:${port}`;
+};
+
+// AI Chat Service
+// Separate client for the AI chat endpoint (different port/service on ESP32)
+const AI_BASE_URL = 'http://172.20.10.5:1234';
+const aiClient = axios.create({
+  baseURL: AI_BASE_URL,
+  timeout: 30000, // 30 second timeout — AI model can take time
+  headers: { 'Content-Type': 'application/json' },
+});
+
+/**
+ * Sends a chat message to the ESP32 AI service and gets a response.
+ * @param {string} message - The user's message/question
+ * @param {string} systemPrompt - Optional system prompt with exercise context
+ * @param {Array} chatHistory - Optional array of {role, content} for context
+ * @returns {Promise<string>} - The AI's response text
+ */
+export const sendChatMessage = async (message, systemPrompt = '', chatHistory = []) => {
+  const messages = [];
+  
+  // Add system prompt if provided
+  if (systemPrompt) {
+    messages.push({ role: 'system', content: systemPrompt });
+  }
+  
+  // Add chat history
+  messages.push(...chatHistory);
+  
+  // Add current message
+  messages.push({ role: 'user', content: message });
+
+  const response = await aiClient.post('/v1/chat/completions', {
+    model: 'local-model',
+    messages: messages,
+    temperature: 0.2,
+    max_tokens: 150,
+    stream: false,
+  });
+
+  if (response.data && response.data.choices && response.data.choices[0]) {
+    return response.data.choices[0].message.content;
+  }
+  
+  throw new Error('Invalid response from AI service');
+};
+
+/**
+ * Lets you point the AI service at a different IP at runtime.
+ */
+export const setAiBaseUrl = (ip, port = 1234) => {
+  aiClient.defaults.baseURL = `http://${ip}:${port}`;
 };
 
 /*

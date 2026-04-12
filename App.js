@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import HomeScreen from './src/screens/HomeScreen';
 import StatsScreen from './src/screens/StatsScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
+import ChatScreen from './src/screens/ChatScreen';
 import RepDetailScreen from './src/screens/RepDetailScreen';
 import { colors } from './src/theme';
 
@@ -23,6 +24,7 @@ const Tab = createBottomTabNavigator();
 const TABS = [
   { name: 'Home', label: 'Home', icon: 'home', screen: HomeScreen },
   { name: 'Stats', label: 'Stats', icon: 'stats-chart', screen: StatsScreen },
+  { name: 'Coach', label: 'Coach', icon: 'chatbubbles', screen: ChatScreen },
   { name: 'Profile', label: 'Profile', icon: 'person', screen: ProfileScreen },
 ];
 

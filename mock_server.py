@@ -73,6 +73,29 @@ SESSIONS = [
             {"rep_number": 8, "form_score": 56, "duration": 2.6, "avg_accel": 9.8, "violations": ["incomplete_extension"]},
         ],
     },
+    {
+        "exercise": "hammer curls",
+        "start_time": time.time() - 86400*4,
+        "end_time": time.time() - 86400*4 + 200,
+        "avg_accel": 9.1,
+        "avg_form_score": 85.0,
+        "rep_count": 12,
+        "anomalies": ["incomplete_extension"],
+        "reps": [
+            {"rep_number": 1, "form_score": 85, "duration": 2.5, "avg_accel": 9.0, "violations": []},
+            {"rep_number": 2, "form_score": 85, "duration": 2.6, "avg_accel": 9.5, "violations": []},
+            {"rep_number": 3, "form_score": 85, "duration": 2.8, "avg_accel": 10.0, "violations": []},
+            {"rep_number": 4, "form_score": 85, "duration": 3.0, "avg_accel": 10.5, "violations": ["incomplete_extension"]},
+            {"rep_number": 5, "form_score": 85, "duration": 2.9, "avg_accel": 10.2, "violations": []},
+            {"rep_number": 6, "form_score": 85, "duration": 3.1, "avg_accel": 10.8, "violations": []},
+            {"rep_number": 7, "form_score": 85, "duration": 2.7, "avg_accel": 10.0, "violations": []},
+            {"rep_number": 8, "form_score": 85, "duration": 2.6, "avg_accel": 9.8, "violations": ["incomplete_extension"]},
+            {"rep_number": 9, "form_score": 85, "duration": 2.5, "avg_accel": 9.6, "violations": []},
+            {"rep_number": 10, "form_score": 85, "duration": 2.4, "avg_accel": 9.4, "violations": []},
+            {"rep_number": 11, "form_score": 85, "duration": 2.3, "avg_accel": 9.2, "violations": []},
+            {"rep_number": 12, "form_score": 85, "duration": 2.2, "avg_accel": 9.0, "violations": []},
+        ],
+    },
 ]
 
 
