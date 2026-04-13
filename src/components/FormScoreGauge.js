@@ -191,9 +191,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textSecondary,
     fontWeight: '500',
-  },
-  miniStats: {
-    flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.bgTertiary,
     borderRadius: 16,

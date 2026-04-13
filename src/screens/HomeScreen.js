@@ -16,9 +16,10 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { getLatestSession, setBaseUrl, getAllSessions, startExercise, EXERCISES } from '../api/esp32Service';
+import { getLatestSession, setBaseUrl, getAllSessions, startExercise, stopExercise, EXERCISES } from '../api/esp32Service';
 import { saveSession, getSessions } from '../api/sessionStorage';
 import FormScoreGauge from '../components/FormScoreGauge';
+import VideoStream from '../components/VideoStream';
 import { colors, shadows, borderRadius } from '../theme';
 
 function getScoreColor(score) {
@@ -59,7 +60,7 @@ function formatDate(timestamp) {
 }
 
 // Exercise dropdown selector component
-function ExerciseDropdown({ onSelectExercise, startingExercise }) {
+function ExerciseDropdown({ onSelectExercise, onStartExercise, onStopExercise, activeExercise, startingExercise, stoppingExercise }) {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedExercise, setSelectedExercise] = useState(null);
   const [showDetails, setShowDetails] = useState(false);
@@ -72,14 +73,20 @@ function ExerciseDropdown({ onSelectExercise, startingExercise }) {
 
   const handleStart = async () => {
     if (selectedExercise) {
-      onSelectExercise(selectedExercise);
+      onStartExercise(selectedExercise);
     }
+  };
+
+  const handleStop = async () => {
+    onStopExercise();
   };
 
   const handleCancel = () => {
     setSelectedExercise(null);
     setShowDetails(false);
   };
+
+  const isRunning = activeExercise && activeExercise.name === selectedExercise.name;
 
   if (showDetails && selectedExercise) {
     return (
@@ -90,10 +97,28 @@ function ExerciseDropdown({ onSelectExercise, startingExercise }) {
           </View>
           <View style={styles.exerciseText}>
             <Text style={styles.exerciseName}>{selectedExercise.name}</Text>
-            <Text style={styles.exerciseLabel}>Selected Exercise</Text>
+            <Text style={styles.exerciseLabel}>
+              {isRunning ? '● Live' : 'Selected Exercise'}
+            </Text>
           </View>
+          {isRunning && (
+            <View style={styles.liveBadge}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveText}>LIVE</Text>
+            </View>
+          )}
         </View>
-        
+
+        {/* Video Stream */}
+        {isRunning && (
+          <View style={styles.videoContainer}>
+            <VideoStream
+              url="http://172.20.10.5:8080/stream"
+              style={styles.videoStream}
+            />
+          </View>
+        )}
+
         <View style={styles.placementInfo}>
           <View style={styles.placementRow}>
             <View style={styles.placementIcon}>
@@ -104,7 +129,7 @@ function ExerciseDropdown({ onSelectExercise, startingExercise }) {
               <Text style={styles.placementValue}>{selectedExercise.bandLocation}</Text>
             </View>
           </View>
-          
+
           <View style={styles.placementRow}>
             <View style={styles.placementIcon}>
               <Ionicons name="navigate" size={16} color={colors.primary} />
@@ -114,7 +139,7 @@ function ExerciseDropdown({ onSelectExercise, startingExercise }) {
               <Text style={styles.placementValue}>{selectedExercise.position}</Text>
             </View>
           </View>
-          
+
           <View style={styles.placementRow}>
             <View style={styles.placementIcon}>
               <Ionicons name="eye" size={16} color={colors.primary} />
@@ -125,25 +150,48 @@ function ExerciseDropdown({ onSelectExercise, startingExercise }) {
             </View>
           </View>
         </View>
-        
+
         <View style={styles.exerciseButtons}>
-          <TouchableOpacity style={styles.cancelButton} onPress={handleCancel} disabled={startingExercise}>
-            <Text style={styles.cancelButtonText}>Change</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.startButton, startingExercise && { opacity: 0.7 }]} 
-            onPress={handleStart}
-            disabled={startingExercise}
-          >
-            {startingExercise ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Ionicons name="play" size={18} color="#fff" />
-            )}
-            <Text style={styles.startButtonText}>
-              {startingExercise ? 'Starting...' : 'Start Exercise'}
-            </Text>
-          </TouchableOpacity>
+          {!isRunning ? (
+            <>
+              <TouchableOpacity 
+                style={styles.cancelButton} 
+                onPress={handleCancel} 
+                disabled={startingExercise}
+              >
+                <Text style={styles.cancelButtonText}>Change</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.startButton, startingExercise && { opacity: 0.7 }]}
+                onPress={handleStart}
+                disabled={startingExercise}
+              >
+                {startingExercise ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Ionicons name="play" size={18} color="#fff" />
+                )}
+                <Text style={styles.startButtonText}>
+                  {startingExercise ? 'Starting...' : 'Start Exercise'}
+                </Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <TouchableOpacity
+              style={[styles.stopButton, stoppingExercise && { opacity: 0.7 }]}
+              onPress={handleStop}
+              disabled={stoppingExercise}
+            >
+              {stoppingExercise ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Ionicons name="stop" size={18} color="#fff" />
+              )}
+              <Text style={styles.stopButtonText}>
+                {stoppingExercise ? 'Stopping...' : 'Stop Exercise'}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     );
@@ -231,6 +279,8 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(false);
   const [allSessions, setAllSessions] = useState([]);
   const [startingExercise, setStartingExercise] = useState(false);
+  const [activeExercise, setActiveExercise] = useState(null);
+  const [stoppingExercise, setStoppingExercise] = useState(false);
   const navigation = useNavigation();
 
   const loadAllSessions = async () => {
@@ -254,21 +304,53 @@ export default function HomeScreen() {
   const handleStartExercise = async (exercise) => {
     setStartingExercise(true);
     try {
-      await startExercise(exercise.name);
+      await startExercise({
+        exercise: exercise.name.toLowerCase(),
+        camera: 0,
+        imu: false,
+        imu_mode: 'interface',
+        stream_port: 8080,
+      });
+      setActiveExercise(exercise);
       Alert.alert(
         'Exercise Started',
-        `${exercise.name} tracking has started. The sensor should be placed on your ${exercise.bandLocation.toLowerCase()} at ${exercise.position.toLowerCase()}, facing ${exercise.sensorFacing.toLowerCase()}.`,
+        `${exercise.name} tracking has started. Video stream is now available at ${exercise.bandLocation.toLowerCase()} - ${exercise.position.toLowerCase()}.`,
         [{ text: 'OK' }]
       );
     } catch (error) {
       console.error('Failed to start exercise:', error);
       Alert.alert(
         'Connection Failed',
-        `Could not start ${exercise.name}. Make sure the ESP32 device is connected and running.`,
+        `Could not start ${exercise.name}. Make sure the server is connected and running.`,
         [{ text: 'OK' }]
       );
     } finally {
       setStartingExercise(false);
+    }
+  };
+
+  const handleStopExercise = async () => {
+    if (!activeExercise) return;
+    
+    setStoppingExercise(true);
+    try {
+      await stopExercise(activeExercise.name.toLowerCase());
+      Alert.alert(
+        'Exercise Stopped',
+        `${activeExercise.name} session has been ended.`,
+        [{ text: 'OK' }]
+      );
+      setActiveExercise(null);
+    } catch (error) {
+      console.error('Failed to stop exercise:', error);
+      Alert.alert(
+        'Error',
+        `Could not stop ${activeExercise.name}. The session may have already ended.`,
+        [{ text: 'OK' }]
+      );
+      setActiveExercise(null);
+    } finally {
+      setStoppingExercise(false);
     }
   };
 
@@ -329,9 +411,12 @@ export default function HomeScreen() {
 
       {/* Exercise Selection Dropdown */}
       <FadeInView delay={50}>
-        <ExerciseDropdown 
-          onSelectExercise={handleStartExercise}
+        <ExerciseDropdown
+          onStartExercise={handleStartExercise}
+          onStopExercise={handleStopExercise}
+          activeExercise={activeExercise}
           startingExercise={startingExercise}
+          stoppingExercise={stoppingExercise}
         />
       </FadeInView>
 
@@ -1006,6 +1091,56 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   startButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#fff',
+  },
+
+  // Live Badge
+  liveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#ff3b30',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#fff',
+  },
+  liveText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: 0.5,
+  },
+
+  // Video Stream
+  videoContainer: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  videoStream: {
+    height: 240,
+  },
+
+  // Stop Button
+  stopButton: {
+    flex: 1,
+    backgroundColor: '#ff3b30',
+    borderRadius: 14,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  stopButtonText: {
     fontSize: 15,
     fontWeight: '700',
     color: '#fff',

@@ -388,10 +388,46 @@ Sensor facing: {placement['facing']}."""
     return jsonify(response)
 
 
+# ---------- Exercise control endpoints ----------
+@app.route("/api/start-exercise", methods=["POST"])
+def start_exercise():
+    """Start an exercise tracking session."""
+    data = request.get_json()
+    
+    if not data or 'exercise' not in data:
+        return make_response(jsonify({"error": "Missing exercise parameter"}), 400)
+    
+    exercise = data.get('exercise')
+    stream_port = data.get('stream_port', 0)
+    
+    print(f"✅ Starting exercise: {exercise}")
+    print(f"   Stream port: {stream_port}")
+    print(f"   Camera: {data.get('camera', 0)}")
+    print(f"   IMU: {data.get('imu', False)}")
+    
+    return jsonify(f"Exercise '{exercise}' started successfully")
+
+
+@app.route("/api/stop-exercise", methods=["POST"])
+def stop_exercise():
+    """Stop an exercise tracking session."""
+    data = request.get_json()
+    
+    if not data or 'exercise' not in data:
+        return make_response(jsonify({"error": "Missing exercise parameter"}), 400)
+    
+    exercise = data.get('exercise')
+    print(f"⏹️  Stopping exercise: {exercise}")
+    
+    return jsonify(f"Exercise '{exercise}' stopped successfully")
+
+
 if __name__ == "__main__":
     print("🏋️  Mock ESP32 server running on http://localhost:8080")
     print("   Endpoints:")
     print("   GET  /session              - Latest session data")
     print("   GET  /sessions             - All sessions")
     print("   POST /v1/chat/completions  - AI chat (sensor placement)")
+    print("   POST /api/start-exercise   - Start exercise tracking")
+    print("   POST /api/stop-exercise    - Stop exercise tracking")
     app.run(host="0.0.0.0", port=8080, debug=False)

@@ -122,8 +122,8 @@ export const EXERCISES = [
   },
 ];
 
-//const BASE_URL = 'http://172.20.10.3:8080'; // - change this
-const BASE_URL = 'http://localhost:8080';
+const BASE_URL = 'http://172.20.10.5:8000'; // - change this
+//const BASE_URL = 'http://localhost:8080';
 const client = axios.create({
   baseURL: BASE_URL,
   timeout: 5000, // 5 second timeout - ESP32 can be slow
@@ -260,11 +260,55 @@ export const setAiBaseUrl = (ip, port = 1234) => {
 
 /**
  * Starts an exercise tracking session on the ESP32.
- * @param {string} exerciseName - The name of the exercise to start
- * @returns {Promise<Object>} - Response from the ESP32
+ * @param {Object} options - Exercise configuration
+ * @param {string} options.exercise - The name of the exercise to start
+ * @param {number} [options.camera=0] - Camera device ID
+ * @param {boolean} [options.imu=false] - Enable IMU tracking
+ * @param {string} [options.imu_mode='interface'] - IMU mode ('interface', 'udp', etc.)
+ * @param {number} [options.imu_port=5005] - IMU port
+ * @param {boolean} [options.buzz=false] - Enable buzzer feedback
+ * @param {number} [options.buzz_threshold=40] - Buzzer threshold
+ * @param {number} [options.stream_port=0] - MJPEG stream port (0 to disable)
+ * @param {string} [options.udp_stream] - UDP stream URL
+ * @returns {Promise<string>} - Response from the server
  */
-export const startExercise = async (exerciseName) => {
-  const response = await client.post('/start', {
+export const startExercise = async ({
+  exercise,
+  camera = 0,
+  imu = false,
+  imu_mode = 'interface',
+  imu_port = 5005,
+  buzz = false,
+  buzz_threshold = 40,
+  stream_port = 0,
+  udp_stream,
+}) => {
+  const body = {
+    exercise,
+    camera,
+    imu,
+    imu_mode,
+    imu_port,
+    buzz,
+    buzz_threshold,
+    stream_port,
+  };
+  
+  if (udp_stream) {
+    body.udp_stream = udp_stream;
+  }
+  
+  const response = await client.post('/api/start-exercise', body);
+  return response.data;
+};
+
+/**
+ * Stops an exercise tracking session.
+ * @param {string} exerciseName - The name of the exercise to stop
+ * @returns {Promise<string>} - Response from the server
+ */
+export const stopExercise = async (exerciseName) => {
+  const response = await client.post('/api/stop-exercise', {
     exercise: exerciseName,
   });
   return response.data;
