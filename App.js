@@ -1,8 +1,6 @@
 // App.js — root entry point
 //
-// Navigation is set up here. Right now there's only HomeScreen,
-// but this structure makes it easy to add a History screen,
-// Settings screen, etc. later.
+// Navigation is set up here. 
 
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
