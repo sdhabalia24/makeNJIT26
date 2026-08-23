@@ -10,11 +10,10 @@
 
 import axios from 'axios';
 
-//const BASE_URL = 'http://10.0.2.2:8080'; // ← change this
 const BASE_URL = 'http://localhost:8080';
 const client = axios.create({
   baseURL: BASE_URL,
-  timeout: 5000, // 5 second timeout — ESP32 can be slow
+  timeout: 5000, // 5 second timeout 
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -29,8 +28,9 @@ export const getLatestSession = async () => {
 
 /**
  * Fetches a live snapshot of the current in-progress session.
- * Uncomment when the ESP32 supports this endpoint.
+ * Uncomment when the ESP32 supports this.
  */
+
 // export const getLiveData = async () => {
 //   const response = await client.get('/live');
 //   return response.data;
